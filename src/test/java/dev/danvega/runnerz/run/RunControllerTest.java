@@ -1,101 +1,91 @@
 package dev.danvega.runnerz.run;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
-import static org.hamcrest.Matchers.is;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.*;
 
-@WebMvcTest(RunController.class)
-class RunControllerTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class RunControllerIntTest {
 
-    @Autowired
-    MockMvc mvc;
+    @LocalServerPort
+    int randomServerPort;
 
-    @Autowired
-    ObjectMapper objectMapper;
-
-    @MockBean
-    JdbcRunRepository repository;
-
-    private final List<Run> runs = new ArrayList<>();
+    RestClient restClient;
 
     @BeforeEach
     void setUp() {
-        runs.add(new Run(1,
-                "Monday Morning Run",
-                LocalDateTime.now(),
-                LocalDateTime.now().plus(30, ChronoUnit.MINUTES),
-                3,
-                Location.INDOOR));
+        restClient = RestClient.create("http://localhost:" + randomServerPort);
     }
 
     @Test
-    void shouldFindAllRuns() throws Exception {
-        when(repository.findAll()).thenReturn(runs);
-        mvc.perform(get("/api/runs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.size()", is(runs.size())));
+    void shouldFindAllRuns() {
+        List<Run> runs = restClient.get()
+                .uri("/api/runs")
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        assertEquals(10, runs.size());
     }
 
     @Test
-    void shouldFindOneRun() throws Exception {
-        Run run = runs.get(0);
-        when(repository.findById(ArgumentMatchers.anyInt())).thenReturn(Optional.of(run));
-        mvc.perform(get("/api/runs/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(run.id())))
-                .andExpect(jsonPath("$.title", is(run.title())))
-                .andExpect(jsonPath("$.miles", is(run.miles())))
-                .andExpect(jsonPath("$.location", is(run.location().toString())));
+    void shouldFindRunById() {
+        Run run = restClient.get()
+                .uri("/api/runs/1")
+                .retrieve()
+                .body(Run.class);
+
+        assertAll(
+                () -> assertEquals(1, run.id()),
+                () -> assertEquals("Noon Run", run.title()),
+                () -> assertEquals("2024-02-20T06:05", run.startedOn().toString()),
+                () -> assertEquals("2024-02-20T10:27", run.completedOn().toString()),
+                () -> assertEquals(24, run.miles()),
+                () -> assertEquals(Location.INDOOR, run.location()));
     }
 
     @Test
-    void shouldReturnNotFoundWithInvalidId() throws Exception {
-        mvc.perform(get("/api/runs/99"))
-                .andExpect(status().isNotFound());
+    void shouldCreateNewRun() {
+        Run run = new Run(11, "Evening Run", LocalDateTime.now(), LocalDateTime.now().plusHours(2), 10, Location.OUTDOOR);
+
+        ResponseEntity<Void> newRun = restClient.post()
+                .uri("/api/runs")
+                .body(run)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertEquals(201, newRun.getStatusCodeValue());
     }
 
     @Test
-    void shouldCreateNewRun() throws Exception {
-        var run = new Run(null,"test", LocalDateTime.now(),LocalDateTime.now(),1, Location.INDOOR);
-        mvc.perform(post("/api/runs")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(run))
-                )
-                .andExpect(status().isCreated());
+    void shouldUpdateExistingRun() {
+        Run run = restClient.get().uri("/api/runs/1").retrieve().body(Run.class);
+
+        assert run != null;
+        ResponseEntity<Void> updatedRun = restClient.put()
+                .uri("/api/runs/1")
+                .body(run)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertEquals(204, updatedRun.getStatusCodeValue());
     }
 
     @Test
-    void shouldUpdateRun() throws Exception {
-        var run = new Run(null,"test", LocalDateTime.now(),LocalDateTime.now(),1, Location.INDOOR);
-        mvc.perform(put("/api/runs/1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(run))
-                )
-                .andExpect(status().isNoContent());
-    }
+    void shouldDeleteRun() {
+        ResponseEntity<Void> run = restClient.delete()
+                .uri("/api/runs/2")
+                .retrieve()
+                .toBodilessEntity();
 
-    @Test
-    public void shouldDeleteRun() throws Exception {
-        mvc.perform(delete("/api/runs/1"))
-                .andExpect(status().isNoContent());
+        assertEquals(204, run.getStatusCodeValue());
     }
 
 }

@@ -1,5 +1,6 @@
 package dev.danvega.runnerz.user;
 
+
 public record User(
         Integer id,
         String name,

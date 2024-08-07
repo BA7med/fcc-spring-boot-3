@@ -4,29 +4,27 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
 @Component
-class UserRestClient {
-
-    private final RestClient restClient;
+public class UserRestClient {
+    private final RestClient userClient;
 
     public UserRestClient(RestClient.Builder builder) {
-        this.restClient = builder
-                .baseUrl("https://jsonplaceholder.typicode.com/")
-                .build();
+        this.userClient = builder.baseUrl("https://jsonplaceholder.typicode.com/").build();
     }
 
-    List<User> findAll() {
-        return restClient.get()
+    public List<User> findAll() {
+        return userClient.get()
                 .uri("/users")
                 .retrieve()
-                .body(new ParameterizedTypeReference<>() {});
+                .body(new ParameterizedTypeReference<>(){});
     }
 
-    User findById(Integer id) {
-        return restClient.get()
-                .uri("/users/{id}", id)
+    public User findById(Integer id) {
+        return userClient.get()
+                .uri("/users/{id}" + id)
                 .retrieve()
                 .body(User.class);
     }
